@@ -12,6 +12,21 @@ class QOpenGLTexture;
 class QOpenGLShader;
 class QOpenGLShaderProgram;
 
+struct Vertex
+{
+    GLfloat x;
+    GLfloat y;
+    GLfloat z;
+
+    GLfloat u;
+    GLfloat v;
+
+    GLfloat n_x;
+    GLfloat n_y;
+    GLfloat n_z;
+};
+
+
 class RenderingWidget : public QOpenGLWidget, protected QOpenGLFunctions
 {
     Q_OBJECT
@@ -39,6 +54,7 @@ private:
     QBasicTimer m_timer;
 
     QOpenGLBuffer m_terrain_vbo;
+    QOpenGLBuffer m_terrain_ibo;
     QScopedPointer< QOpenGLTexture > m_texture;
 
     QScopedPointer< QOpenGLShader > m_terrain_vertex_shader;
@@ -47,10 +63,8 @@ private:
 
     QMatrix4x4 m_projection;
 
-	std::vector< float > m_vertices;
-	std::vector< float > m_tex_coords;
-	std::vector< float > m_normals;
-
+    std::vector< GLuint > m_indices;
+    std::vector< Vertex > m_vertices;
 
     float m_scale;
     float m_angle;
