@@ -68,6 +68,9 @@ private:
 
     float m_scale;
     float m_angle;
+
+    size_t m_max_index;
+    std::pair< size_t, size_t > m_index_range;
 };
 
 #endif // RENDERINGWIDGET_H

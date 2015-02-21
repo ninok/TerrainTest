@@ -6,12 +6,52 @@
 #include <QOpenGLShader>
 #include <QOpenGLShaderProgram>
 
+#include <stdint.h>
+
+uint32_t
+interleave_bits(uint16_t x, uint16_t y)
+{
+    x = ((x << 8) | x) & 0x00FF00FFU;
+    x = ((x << 4) | x) & 0x0F0F0F0FU;
+    x = ((x << 2) | x) & 0x33333333U;
+    x = ((x << 1) | x) & 0x55555555U;
+
+    y = ((y << 8) | y) & 0x00FF00FFU;
+    y = ((y << 4) | y) & 0x0F0F0F0FU;
+    y = ((y << 2) | y) & 0x33333333U;
+    y = ((y << 1) | y) & 0x55555555U;
+
+    return (x | (y << 1));
+}
+
+// -------------------------------------------------------------------------------------------------
+
+void
+deinterleave_bits(uint16_t val, uint16_t& x, uint16_t& y)
+{
+    x = val & 0x55555555U;
+    x = ((x >> 1) | x) & 0x33333333U;
+    x = ((x >> 2) | x) & 0x0F0F0F0FU;
+    x = ((x >> 4) | x) & 0x00FF00FFU;
+    x = ((x >> 8) | x) & 0x0000FFFFU;
+
+    y = (val >> 1) & 0x55555555U;
+    y = ((y >> 1) | y) & 0x33333333U;
+    y = ((y >> 2) | y) & 0x0F0F0F0FU;
+    y = ((y >> 4) | y) & 0x00FF00FFU;
+    y = ((y >> 8) | y) & 0x0000FFFFU;
+}
+
+// -------------------------------------------------------------------------------------------------
+
 RenderingWidget::RenderingWidget(QWidget *parent)
     : QOpenGLWidget(parent),
       m_terrain_vbo( QOpenGLBuffer::VertexBuffer ),
       m_terrain_ibo( QOpenGLBuffer::IndexBuffer ),
       m_angle( 0.0f ),
-      m_scale( 1.0f )
+      m_scale( 1.0f ),
+      m_max_index( 0 ),
+      m_index_range( 0, 0)
 {
 
 }
@@ -81,7 +121,7 @@ void RenderingWidget::paintGL()
     m_terrain_shader_program->setAttributeBuffer(normal_attr, GL_FLOAT, 5 * sizeof(GLfloat), 3, sizeof(Vertex));
 
     glEnable(GL_DEPTH_TEST);
-    glDrawElements(GL_TRIANGLES, (int)m_indices.size( ), GL_UNSIGNED_INT, nullptr );
+    glDrawElements(GL_TRIANGLES, (int)m_index_range.second, GL_UNSIGNED_INT, nullptr );
     glEnable(GL_DEPTH_TEST);
 
     m_terrain_ibo.release();
@@ -102,7 +142,7 @@ void RenderingWidget::initializeGL()
 
     glClearColor(0, 0, 0, 1);
 
-    m_timer.start(12, this);
+    m_timer.start(10, this);
 }
 
 void RenderingWidget::init_terrain()
@@ -161,6 +201,12 @@ void RenderingWidget::init_terrain_vbo()
     m_terrain_vbo.write(0, m_vertices.data(), m_vertices.size( ) * sizeof( Vertex ) );
     m_terrain_vbo.release();
 
+
+    Q_ASSERT(width <= (size_t)std::numeric_limits<uint16_t>::max);
+    Q_ASSERT(height <= (size_t)std::numeric_limits<uint16_t>::max);
+
+    m_max_index = (width - 1) * (height - 1) * 6;
+    m_indices.resize( m_max_index );
     for (size_t iy = 0; iy < height - 1; ++iy)
     {
         const float y = iy / (height - 1.0f);
@@ -178,29 +224,34 @@ void RenderingWidget::init_terrain_vbo()
             const GLuint idx_2 = (iy+1) * width + ix + 1;
             const GLuint idx_3 = iy * width + ix + 1;
 
-            m_indices.push_back( idx_0 );
-            m_indices.push_back( idx_1 );
-            m_indices.push_back( idx_2 );
+            size_t index = interleave_bits(ix, iy) * 6;
+            //size_t index = (iy * (width - 1) + ix) * 6;
 
-            m_indices.push_back( idx_0 );
-            m_indices.push_back( idx_2 );
-            m_indices.push_back( idx_3 );
+            m_indices[index++] = idx_0;
+            m_indices[index++] = idx_1;
+            m_indices[index++] = idx_2;
+
+            m_indices[index++] = idx_0;
+            m_indices[index++] = idx_2;
+            m_indices[index++] = idx_3;
         }
     }
 
     const int indices_size = (int)(m_indices.size( ) * sizeof(GLuint) );
-
     m_terrain_ibo.create();
     m_terrain_ibo.bind();
     m_terrain_ibo.allocate( indices_size );
     m_terrain_ibo.write(0, m_indices.data(), indices_size );
     m_terrain_ibo.release( );
-
 }
 
 void RenderingWidget::timerEvent(QTimerEvent *e)
 {
-    m_angle+=1.0f;
+    m_index_range.second+= 10;
+    if (m_index_range.second > m_max_index)
+        m_index_range.second = 1;
+
+    //m_angle+=1.0f;
     update( );
 }
 
