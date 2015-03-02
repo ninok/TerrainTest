@@ -1,10 +1,17 @@
 #include "renderingwidget.h"
 
 #include <QPainter>
+#include <QKeyEvent>
 
 #include <QOpenGLTexture>
 #include <QOpenGLShader>
 #include <QOpenGLShaderProgram>
+
+#include <glm/gtx/rotate_vector.hpp>
+#include <glm/gtc/matrix_transform.hpp> // glm::translate, glm::rotate, glm::scale, glm::perspective
+#include <glm/gtc/type_ptr.hpp> // glm::value_ptr
+
+#include <glm/mat3x3.hpp>
 
 #include <stdint.h>
 
@@ -48,12 +55,14 @@ RenderingWidget::RenderingWidget(QWidget *parent)
     : QOpenGLWidget(parent),
       m_terrain_vbo( QOpenGLBuffer::VertexBuffer ),
       m_terrain_ibo( QOpenGLBuffer::IndexBuffer ),
-      m_angle( 0.0f ),
+      m_eye(0.0, 0.0, -5.0),
+      m_center(0.0, 0.0, 0.0),
+      m_up(0.0, 1.0, 0.0),
       m_scale( 1.0f ),
       m_max_index( 0 ),
       m_index_range( 0, 0)
 {
-
+    setFocusPolicy( Qt::StrongFocus );
 }
 
 RenderingWidget::~RenderingWidget()
@@ -73,11 +82,7 @@ void RenderingWidget::resizeGL(int w, int h)
     // Set near plane to 3.0, far plane to 7.0, field of view 45 degrees
     const qreal zNear = 3.0, zFar = 7.0, fov = 45.0;
 
-    // Reset projection
-    m_projection.setToIdentity();
-
-    // Set perspective projection
-    m_projection.perspective(fov, aspect, zNear, zFar);
+    m_projection_matrix = glm::perspective( fov, aspect, zNear, zFar);
 }
 
 void RenderingWidget::paintGL()
@@ -88,22 +93,22 @@ void RenderingWidget::paintGL()
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     // Calculate model view transformation
-    QMatrix4x4 modelview_matrix;
-
-    modelview_matrix.translate(0.0, 0.0, -4.0);
-    modelview_matrix.rotate(m_angle, 0.0f, 1.0f, 0.0f);
-    modelview_matrix.rotate( -65.0f, 1.0f, 0.0f, 0.0f);
-    //modelview_matrix.rotate(m_angle, 0.0f, 0.0f, 1.0f);
-    modelview_matrix.scale(m_scale);
-    //modelview_matrix.translate(0.0f, -0.2f, 0.0f);
+    glm::mat4 view = glm::lookAt(m_eye, m_center, m_up);
+    glm::mat4 model(1.0f);
+    //model = glm::rotate(model, glm::radians(m_rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+    //model = glm::rotate(model, glm::radians(m_rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+    //model = glm::rotate(model, glm::radians(m_rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+    model = glm::scale(model, glm::vec3(m_scale, m_scale, m_scale));
+    //model = glm::translate(model, glm::vec3(0.0, 0.0, 2.0));
 
     m_texture->bind( );
     m_terrain_shader_program->bind( );
     m_terrain_shader_program->setUniformValue("texture", 0);
-    m_terrain_shader_program->setUniformValue("MV", modelview_matrix);
-    m_terrain_shader_program->setUniformValue("MVP", m_projection * modelview_matrix);
-    //m_matrixUniform2 = m_terrain_shader_program->uniformLocation("matrix");
-    //m_textureUniform2 = m_terrain_shader_program->uniformLocation("texture");
+
+    glUniformMatrix4fv(m_terrain_shader_program->uniformLocation("MV"), 1, GL_FALSE, glm::value_ptr(view * model));
+    glUniformMatrix4fv(m_terrain_shader_program->uniformLocation("MVP"), 1, GL_FALSE, glm::value_ptr(m_projection_matrix * view * model));
+    //m_terrain_shader_program->setUniformValue("MV", QMatrix4x4(glm::value_ptr(modelview_matrix)));
+    //m_terrain_shader_program->setUniformValue("MVP", QMatrix4x4(glm::value_ptr(m_projection_matrix * modelview_matrix)));
 
     int vertex_attr = m_terrain_shader_program->attributeLocation("vertex");
     int normal_attr = m_terrain_shader_program->attributeLocation("normal");
@@ -121,7 +126,9 @@ void RenderingWidget::paintGL()
     m_terrain_shader_program->setAttributeBuffer(normal_attr, GL_FLOAT, 5 * sizeof(GLfloat), 3, sizeof(Vertex));
 
     glEnable(GL_DEPTH_TEST);
-    glDrawElements(GL_TRIANGLES, (int)m_index_range.second, GL_UNSIGNED_INT, nullptr );
+    glDrawElements(GL_TRIANGLES, (int)(128 * 128 * 6) , GL_UNSIGNED_INT, (void*)0 );
+
+
     glEnable(GL_DEPTH_TEST);
 
     m_terrain_ibo.release();
@@ -245,13 +252,62 @@ void RenderingWidget::init_terrain_vbo()
     m_terrain_ibo.release( );
 }
 
-void RenderingWidget::timerEvent(QTimerEvent *e)
+void RenderingWidget::timerEvent(QTimerEvent*)
 {
-    m_index_range.second+= 10;
+    m_index_range.second += 6;
     if (m_index_range.second > m_max_index)
         m_index_range.second = 1;
 
     //m_angle+=1.0f;
     update( );
+}
+
+void RenderingWidget::keyPressEvent(QKeyEvent* e)
+{
+    using namespace glm;
+    const vec3 ahead = normalize( m_center - m_eye );
+    const vec3 left = normalize( cross(ahead, m_up) );
+
+    switch (e->key())
+    {
+    case Qt::Key_Plus:
+        m_scale += 0.1f;
+        update();
+        break;
+    case Qt::Key_Minus:
+        m_scale = std::max( m_scale - 0.1f, 0.1f );
+        update();
+        break;
+    case Qt::Key_W:
+    case Qt::Key_Up:
+        m_eye += 0.1f * ahead;
+        m_center += 0.1f * ahead;
+        update();
+        break;
+    case Qt::Key_S:
+    case Qt::Key_Down:
+        m_eye -= 0.1f * ahead;
+        m_center -= 0.1f * ahead;
+        update();
+        break;
+    case Qt::Key_A:
+        m_eye += 0.1f * left;
+        m_center += 0.1f * left;
+        update();
+        break;
+    case Qt::Key_D:
+        m_eye -= 0.1f * left;
+        m_center -= 0.1f * left;
+        update();
+        break;
+    case Qt::Key_Left:
+        m_center = m_eye + rotate(ahead, radians(1.0f), m_up);
+        update();
+        break;
+    case Qt::Key_Right:
+        m_center = m_eye + rotate(ahead, radians(-1.0f), m_up);
+        update();
+        break;
+    }
 }
 

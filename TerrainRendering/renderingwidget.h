@@ -6,7 +6,9 @@
 #include <QOpenGLWidget>
 #include <QOpenGLFunctions>
 #include <QOpenGLBuffer>
-#include <QMatrix4x4>
+
+#include <glm/vec3.hpp>
+#include <glm/mat4x4.hpp>
 
 class QOpenGLTexture;
 class QOpenGLShader;
@@ -43,7 +45,9 @@ protected:
     void init_terrain_shaders( );
     void init_terrain_vbo( );
 
-    void timerEvent( QTimerEvent *e ) override;
+    void timerEvent( QTimerEvent* e ) override;
+
+    void keyPressEvent(QKeyEvent* event) override;
 
 signals:
 
@@ -61,13 +65,15 @@ private:
     QScopedPointer< QOpenGLShader > m_terrain_fragment_shader;
     QScopedPointer< QOpenGLShaderProgram > m_terrain_shader_program;
 
-    QMatrix4x4 m_projection;
+    glm::mat4x4 m_projection_matrix;
 
     std::vector< GLuint > m_indices;
     std::vector< Vertex > m_vertices;
 
     float m_scale;
-    float m_angle;
+    glm::vec3 m_center;
+    glm::vec3 m_eye;
+    glm::vec3 m_up;
 
     size_t m_max_index;
     std::pair< size_t, size_t > m_index_range;
