@@ -112,7 +112,7 @@ void RenderingWidget::paintGL()
 
     int vertex_attr = m_terrain_shader_program->attributeLocation("vertex");
     int normal_attr = m_terrain_shader_program->attributeLocation("normal");
-    int tex_coord_attr = m_terrain_shader_program->attributeLocation("texCoord");
+    int tex_coord_attr = m_terrain_shader_program->attributeLocation("tex_coords");
 
     m_terrain_shader_program->enableAttributeArray(vertex_attr);
     m_terrain_shader_program->enableAttributeArray(normal_attr);
@@ -126,8 +126,8 @@ void RenderingWidget::paintGL()
     m_terrain_shader_program->setAttributeBuffer(normal_attr, GL_FLOAT, 5 * sizeof(GLfloat), 3, sizeof(Vertex));
 
     glEnable(GL_DEPTH_TEST);
-    glDrawElements(GL_TRIANGLES, (int)(128 * 128 * 6) , GL_UNSIGNED_INT, (void*)0 );
-
+    const size_t quad_count = ( m_heightmap.width( ) - 1 ) *( m_heightmap.height( ) - 1 );
+    glDrawElements(GL_TRIANGLES, (int)(quad_count * 6) , GL_UNSIGNED_INT, (void*)0 );
 
     glEnable(GL_DEPTH_TEST);
 
@@ -143,9 +143,10 @@ void RenderingWidget::initializeGL()
 {
     initializeOpenGLFunctions();
 
-    init_terrain( );
+    m_heightmap.load( ":/heightmap.png" );
+    m_texture.reset( new QOpenGLTexture( m_heightmap ) );
 
-    m_texture.reset( new QOpenGLTexture( QImage(":/qt.png") ) );
+    init_terrain( );
 
     glClearColor(0, 0, 0, 1);
 
@@ -178,8 +179,8 @@ void RenderingWidget::init_terrain_vbo()
 {
     Q_ASSERT( !m_terrain_vbo.isCreated( ) );
 
-    const size_t width = 129;
-    const size_t height = 129;
+    const size_t width = m_heightmap.width( );
+    const size_t height = m_heightmap.height( );
 
     for (size_t iy = 0; iy < height; ++iy)
     {
@@ -208,16 +209,13 @@ void RenderingWidget::init_terrain_vbo()
     m_terrain_vbo.write(0, m_vertices.data(), m_vertices.size( ) * sizeof( Vertex ) );
     m_terrain_vbo.release();
 
-
     Q_ASSERT(width <= (size_t)std::numeric_limits<uint16_t>::max);
     Q_ASSERT(height <= (size_t)std::numeric_limits<uint16_t>::max);
 
-    m_max_index = (width - 1) * (height - 1) * 6;
+    m_max_index = width * height * 6;
     m_indices.resize( m_max_index );
     for (size_t iy = 0; iy < height - 1; ++iy)
     {
-        const float y = iy / (height - 1.0f);
-
         for (size_t ix = 0; ix < width - 1; ++ix)
         {
             // 0---3
@@ -231,8 +229,8 @@ void RenderingWidget::init_terrain_vbo()
             const GLuint idx_2 = (iy+1) * width + ix + 1;
             const GLuint idx_3 = iy * width + ix + 1;
 
-            size_t index = interleave_bits(ix, iy) * 6;
-            //size_t index = (iy * (width - 1) + ix) * 6;
+            //size_t index = interleave_bits(ix, iy) * 6;
+            size_t index = (iy * (width - 1) + ix) * 6;
 
             m_indices[index++] = idx_0;
             m_indices[index++] = idx_1;
@@ -311,3 +309,13 @@ void RenderingWidget::keyPressEvent(QKeyEvent* e)
     }
 }
 
+void RenderingWidget::mouseMoveEvent( QMouseEvent* event )
+{
+    event->accept( );
+}
+
+
+void RenderingWidget::wheelEvent( QWheelEvent* event )
+{
+    event->accept( );
+}

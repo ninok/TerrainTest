@@ -47,7 +47,11 @@ protected:
 
     void timerEvent( QTimerEvent* e ) override;
 
-    void keyPressEvent(QKeyEvent* event) override;
+    void keyPressEvent( QKeyEvent* event ) override;
+
+    void mouseMoveEvent( QMouseEvent* event ) override;
+
+    void wheelEvent( QWheelEvent* event ) override;
 
 signals:
 
@@ -59,6 +63,8 @@ private:
 
     QOpenGLBuffer m_terrain_vbo;
     QOpenGLBuffer m_terrain_ibo;
+
+    QImage m_heightmap;
     QScopedPointer< QOpenGLTexture > m_texture;
 
     QScopedPointer< QOpenGLShader > m_terrain_vertex_shader;
